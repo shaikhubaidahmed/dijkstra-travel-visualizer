@@ -40,3 +40,21 @@ body {
   margin: auto;
   display: block;
 }
+
+#settings {
+  max-width: 960px;
+  margin: 20px auto;
+  padding: 10px 15px;
+  border: 1px solid lightgray;
+  border-radius: 4px;
+}
+
+#settings summary {
+  cursor: pointer;
+  font-weight: bold;
+}
+
+#settings input[type="color"] {
+  padding: 2px;
+  height: calc(1.5em + 0.75rem + 2px);
+}

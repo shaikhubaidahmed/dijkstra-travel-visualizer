@@ -2,76 +2,142 @@ onload = function () {
   // create a network
   var curr_data;
   var sz;
+  var src;
+  var dst;
+  var config;
+  var cities = [
+    "Delhi",
+    "Mumbai",
+    "Gujarat",
+    "Goa",
+    "Kanpur",
+    "Jammu",
+    "Hyderabad",
+    "Bangalore",
+    "Gangtok",
+    "Meghalaya",
+  ];
   var container = document.getElementById("mynetwork");
   var container2 = document.getElementById("mynetwork2");
   var genNew = document.getElementById("generate-graph");
   var solve = document.getElementById("solve");
   var temptext = document.getElementById("temptext");
   var temptext2 = document.getElementById("temptext2");
-  // initialise graph options
-  var options = {
-    edges: {
-      labelHighlightBold: true,
-      font: {
-        size: 20,
+  var busIcon = document.getElementById("busIcon");
+  var planeIcon = document.getElementById("planeIcon");
+  var srcSelect = document.getElementById("srcSelect");
+  var dstSelect = document.getElementById("dstSelect");
+
+  function cityLabel(i) {
+    return cities[i - 1] || "City " + i;
+  }
+
+  function readConfig() {
+    const num = (id, fallback) => {
+      const v = parseFloat(document.getElementById(id).value);
+      return Number.isFinite(v) ? v : fallback;
+    };
+    let minNodes = Math.max(3, Math.round(num("minNodes", 3)));
+    let maxNodes = Math.max(minNodes, Math.round(num("maxNodes", 10)));
+    let busMin = Math.max(1, Math.round(num("busMin", 31)));
+    let busMax = Math.max(busMin, Math.round(num("busMax", 100)));
+    let planeMin = Math.max(1, Math.round(num("planeMin", 1)));
+    let planeMax = Math.max(planeMin, Math.round(num("planeMax", 50)));
+    let maxHopBack = Math.max(1, Math.round(num("maxHopBack", 3)));
+    let extraEdgeRatio =
+      Math.min(100, Math.max(0, num("extraEdgeRatio", 50))) / 100;
+    let busShareOfExtra =
+      Math.min(100, Math.max(0, num("busShareOfExtra", 50))) / 100;
+    let nodeColor = document.getElementById("nodeColor").value || "#991133";
+    let busColor = document.getElementById("busColor").value || "#ffa500";
+    let planeColor = document.getElementById("planeColor").value || "#008000";
+    return {
+      minNodes,
+      maxNodes,
+      busMin,
+      busMax,
+      planeMin,
+      planeMax,
+      maxHopBack,
+      extraEdgeRatio,
+      busShareOfExtra,
+      nodeColor,
+      busColor,
+      planeColor,
+    };
+  }
+
+  function buildVisOptions() {
+    return {
+      edges: {
+        labelHighlightBold: true,
+        font: {
+          size: 20,
+        },
       },
-    },
-    nodes: {
-      font: "12px arial red",
-      scaling: {
-        label: true,
+      nodes: {
+        font: "12px arial red",
+        scaling: {
+          label: true,
+        },
+        shape: "icon",
+        icon: {
+          face: "FontAwesome",
+          code: "",
+          size: 40,
+          color: config.nodeColor,
+        },
       },
-      shape: "icon",
-      icon: {
-        face: "FontAwesome",
-        code: "\uf015",
-        size: 40,
-        color: "#991133",
-      },
-    },
-  };
+    };
+  }
+
   // initialize your network!
   var network = new vis.Network(container);
-  network.setOptions(options);
   var network2 = new vis.Network(container2);
-  network2.setOptions(options);
 
   function createData() {
-    sz = Math.floor(Math.random() * 8) + 3;
-    const cities = [
-      "Delhi",
-      "Mumbai",
-      "Gujarat",
-      "Goa",
-      "Kanpur",
-      "Jammu",
-      "Hyderabad",
-      "Bangalore",
-      "Gangtok",
-      "Meghalaya",
-    ];
+    config = readConfig();
+    network.setOptions(buildVisOptions());
+    network2.setOptions(buildVisOptions());
+    busIcon.style.color = config.busColor;
+    planeIcon.style.color = config.planeColor;
+
+    sz =
+      Math.floor(
+        Math.random() * (config.maxNodes - config.minNodes + 1)
+      ) + config.minNodes;
     let nodes = [];
     for (let i = 1; i <= sz; i++) {
-      nodes.push({ id: i, label: cities[i - 1] });
+      nodes.push({ id: i, label: cityLabel(i) });
     }
     nodes = new vis.DataSet(nodes);
 
     let edges = [];
     for (let i = 2; i <= sz; i++) {
-      let neigh = i - Math.floor(Math.random() * Math.min(i - 1, 3) + 1);
+      let neigh =
+        i - Math.floor(Math.random() * Math.min(i - 1, config.maxHopBack) + 1);
       edges.push({
         type: 0,
         from: i,
         to: neigh,
-        color: "orange",
-        label: String(Math.floor(Math.random() * 70) + 31),
+        color: config.busColor,
+        label: String(
+          Math.floor(Math.random() * (config.busMax - config.busMin + 1)) +
+            config.busMin
+        ),
       });
     }
 
     src = 1;
     dst = sz;
 
-    for (let i = 1; i <= sz / 2; ) {
+    const extraEdgeCount = Math.max(0, Math.round(sz * config.extraEdgeRatio));
+    const busThreshold = Math.round(extraEdgeCount * config.busShareOfExtra);
+    const maxAttempts = 10000;
+    let attempts = 0;
+
+    for (let i = 1; i <= extraEdgeCount && attempts < maxAttempts; ) {
+      attempts++;
       let n1 = Math.floor(Math.random() * sz) + 1;
       let n2 = Math.floor(Math.random() * sz) + 1;
       if (n1 != n2) {
@@ -89,21 +155,29 @@ onload = function () {
         }
 
         if (works <= 1) {
-          if (works === 0 && i < sz / 4) {
+          if (works === 0 && i <= busThreshold) {
             edges.push({
               type: 0,
               from: n1,
               to: n2,
-              color: "orange",
-              label: String(Math.floor(Math.random() * 70) + 31),
+              color: config.busColor,
+              label: String(
+                Math.floor(
+                  Math.random() * (config.busMax - config.busMin + 1)
+                ) + config.busMin
+              ),
             });
           } else {
             edges.push({
               type: 1,
               from: n1,
               to: n2,
-              color: "green",
-              label: String(Math.floor(Math.random() * 50) + 1),
+              color: config.planeColor,
+              label: String(
+                Math.floor(
+                  Math.random() * (config.planeMax - config.planeMin + 1)
+                ) + config.planeMin
+              ),
             });
           }
           i++;
@@ -118,11 +192,46 @@ onload = function () {
     curr_data = data;
   }
 
+  function populateEndpointSelects() {
+    srcSelect.innerHTML = "";
+    dstSelect.innerHTML = "";
+    for (let i = 1; i <= sz; i++) {
+      const label = cityLabel(i);
+
+      const opt1 = document.createElement("option");
+      opt1.value = i;
+      opt1.textContent = label;
+      srcSelect.appendChild(opt1);
+
+      const opt2 = document.createElement("option");
+      opt2.value = i;
+      opt2.textContent = label;
+      dstSelect.appendChild(opt2);
+    }
+    srcSelect.value = src;
+    dstSelect.value = dst;
+  }
+
+  function updateProblemText() {
+    temptext2.innerText =
+      "Find least time path from " + cityLabel(src) + " to " + cityLabel(dst);
+  }
+
+  srcSelect.onchange = function () {
+    src = parseInt(srcSelect.value);
+    updateProblemText();
+  };
+
+  dstSelect.onchange = function () {
+    dst = parseInt(dstSelect.value);
+    updateProblemText();
+  };
+
   genNew.onclick = function () {
     createData();
     network.setData(curr_data);
-    temptext2.innerText =
-      "Find least time path from " + cities[src - 1] + " to " + cities[dst - 1];
+    populateEndpointSelects();
+    updateProblemText();
     temptext.style.display = "inline";
     temptext2.style.display = "inline";
     container2.style.display = "none";
@@ -205,19 +314,19 @@ onload = function () {
       }
     }
 
-    new_edges = [];
+    let new_edges = [];
     if (plane !== 0) {
       new_edges.push({
         arrows: { to: { enabled: true } },
         from: p1 + 1,
         to: p2 + 1,
-        color: "green",
+        color: config.planeColor,
         label: String(plane),
       });
-      new_edges.concat(pushEdges(dist1, p1, false));
-      new_edges.concat(pushEdges(dist2, p2, true));
+      new_edges = new_edges.concat(pushEdges(dist1, p1, false));
+      new_edges = new_edges.concat(pushEdges(dist2, p2, true));
     } else {
-      new_edges.concat(pushEdges(dist1, dst - 1, false));
+      new_edges = new_edges.concat(pushEdges(dist1, dst - 1, false));
     }
     data = {
       nodes: data["nodes"],
@@ -227,28 +336,28 @@ onload = function () {
   }
 
   function pushEdges(dist, curr, reverse) {
-    tmp_edges = [];
+    let path_edges = [];
     while (dist[curr][0] != 0) {
       let fm = dist[curr][1];
       if (reverse)
-        new_edges.push({
+        path_edges.push({
           arrows: { to: { enabled: true } },
           from: curr + 1,
           to: fm + 1,
-          color: "orange",
+          color: config.busColor,
           label: String(dist[curr][0] - dist[fm][0]),
         });
       else
-        new_edges.push({
+        path_edges.push({
           arrows: { to: { enabled: true } },
           from: fm + 1,
           to: curr + 1,
-          color: "orange",
+          color: config.busColor,
           label: String(dist[curr][0] - dist[fm][0]),
         });
       curr = fm;
     }
-    return tmp_edges;
+    return path_edges;
   }
 
   genNew.click();
